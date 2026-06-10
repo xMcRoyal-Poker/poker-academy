@@ -380,9 +380,53 @@ PT.UI = (function () {
           <div class="bic">${b.icon}</div><div class="bn">${b.name}</div></div>`).join("")}
       </div>
 
+      <div class="label">SYNC / BACKUP</div>
+      <button class="btn btn-secondary btn-full" id="exportBtn">⬇️ Export progress (file + copy)</button>
+      <label class="btn btn-secondary btn-full" style="display:block;margin-top:8px;text-align:center;cursor:pointer">
+        ⬆️ Import progress (choose file)
+        <input type="file" id="importFile" accept="application/json,.json" style="display:none">
+      </label>
+      <div class="looprow center">Move your progress between iPhone and PC — export on one, import on the other.</div>
+
       <div class="label">DEV</div>
       <button class="btn btn-secondary btn-full" id="reset">Reset all progress</button>
     `;
+
+    $("#exportBtn").onclick = async () => {
+      const json = JSON.stringify(PT.state, null, 2);
+      try {
+        const blob = new Blob([json], { type: "application/json" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "poker-progress.json";
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+      } catch (e) { /* download may be blocked in some PWA contexts */ }
+      try { await navigator.clipboard.writeText(json); toast("Exported — file saved + copied to clipboard"); }
+      catch { toast("Progress file exported"); }
+    };
+
+    $("#importFile").onchange = (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const r = new FileReader();
+      r.onload = () => {
+        let data;
+        try { data = JSON.parse(r.result); }
+        catch { toast("Couldn't read that file"); return; }
+        if (typeof data.xp !== "number" || !("phase" in data) || !("moduleIndex" in data)) {
+          toast("That's not a valid progress file"); return;
+        }
+        if (confirm("Import this progress? It replaces what's currently on THIS device.")) {
+          PT.state = Object.assign(PT.Store.default(), data);
+          PT.Store.save(PT.state);
+          toast("✅ Progress imported");
+          PT.go("home");
+        }
+      };
+      r.readAsText(file);
+    };
+
     $("#reset").onclick = () => {
       if (confirm("Reset all progress? This cannot be undone.")) {
         PT.state = PT.Store.reset(); PT.go("home");
