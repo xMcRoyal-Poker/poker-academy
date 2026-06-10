@@ -1,0 +1,76 @@
+/* ============================================================
+   STORE — all progress in localStorage. No backend.
+   ============================================================ */
+window.PT = window.PT || {};
+
+PT.Store = {
+  KEY: "poker-trainer-v1",
+
+  default() {
+    return {
+      // Step 1 (destination) + Step 2 (SMART goal) — set in first-run onboarding
+      profile: { onboarded: false, why: "", level: "", commitment: "", goal: "" },
+      xp: 0,
+      streak: 0,            // consecutive sessions
+      sessionsDone: 0,      // total sessions completed
+      totalDrills: 0,       // total drills answered
+      correctDrills: 0,
+      phase: 1,             // current phase (1-3, for level gating)
+      moduleIndex: 0,       // index into current phase's modules (sub-dominoes)
+      sessionsOnModule: 0,  // how many sessions done on the current sub-domino (self-paced)
+      phasesComplete: [],   // [1,2,...]
+      // per-session task completion flags, reset each session
+      todayTasks: { read: false, drills: false, review: false },
+      // leak tracking: { concept: {wrong, total} }
+      conceptStats: {},
+      // flagged leaks (from menu or coach)
+      flaggedLeaks: [],
+      // spaced-repetition: drillId -> due session number
+      srs: {},
+      // play session log
+      playLog: [],
+      // badges already celebrated (avoid re-popping)
+      seenBadges: [],
+      lastLevel: 1,
+      created: null
+    };
+  },
+
+  load() {
+    try {
+      const raw = localStorage.getItem(this.KEY);
+      if (!raw) { const d = this.default(); this.save(d); return d; }
+      return Object.assign(this.default(), JSON.parse(raw));
+    } catch (e) {
+      console.warn("store load failed, resetting", e);
+      const d = this.default(); this.save(d); return d;
+    }
+  },
+
+  save(s) {
+    try { localStorage.setItem(this.KEY, JSON.stringify(s)); }
+    catch (e) { console.warn("store save failed", e); }
+  },
+
+  reset() {
+    localStorage.removeItem(this.KEY);
+    return this.load();
+  },
+
+  // Record a drill answer for leak tracking
+  recordAnswer(s, concept, correct) {
+    if (!s.conceptStats[concept]) s.conceptStats[concept] = { wrong: 0, total: 0 };
+    s.conceptStats[concept].total++;
+    if (!correct) s.conceptStats[concept].wrong++;
+    s.totalDrills++;
+    if (correct) s.correctDrills++;
+  },
+
+  // Weakest concepts (auto leak detection, layer 1)
+  weakSpots(s, min = 2) {
+    return Object.entries(s.conceptStats)
+      .filter(([, v]) => v.total >= min && v.wrong / v.total >= 0.4)
+      .sort((a, b) => (b[1].wrong / b[1].total) - (a[1].wrong / a[1].total))
+      .map(([c, v]) => ({ concept: c, rate: Math.round((v.wrong / v.total) * 100), n: v.total }));
+  }
+};
