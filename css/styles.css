@@ -194,6 +194,14 @@ h1.page{font-size:22px;margin:18px 2px 4px}
 
 /* ===== native-feel polish: screen fade + tactile press states ===== */
 @keyframes appfade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* update banner — sits just above the bottom nav, tappable */
+.update-banner{position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(82px + env(safe-area-inset-bottom));z-index:160;
+  background:var(--grad);color:#fff;font-size:13px;font-weight:700;
+  padding:11px 20px;border-radius:22px;box-shadow:0 6px 24px #000a;cursor:pointer;
+  animation:pop .3s ease;max-width:90%;text-align:center}
+.update-banner.busy{opacity:.7;pointer-events:none}
 .btn,.task,.choice,.leak,.lvl-row,.nav a,.option,.card[onclick]{
   transition:transform .08s ease, opacity .12s ease, border-color .15s ease, background .15s ease;
   -webkit-touch-callout:none; user-select:none;

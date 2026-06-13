@@ -71,7 +71,33 @@ function renderNav(active) {
 window.addEventListener("hashchange", () => render((location.hash || "#home").slice(1)));
 window.addEventListener("DOMContentLoaded", () => render((location.hash || "#home").slice(1)));
 
-// register service worker for offline / installable PWA
+// register service worker + offer "tap to refresh" when a new version is ready
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").then(reg => {
+      if (reg.waiting && navigator.serviceWorker.controller) showUpdateBanner(reg.waiting);
+      reg.addEventListener("updatefound", () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener("statechange", () => {
+          if (nw.state === "installed" && navigator.serviceWorker.controller) showUpdateBanner(nw);
+        });
+      });
+    }).catch(() => {});
+
+    let reloading = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloading) return; reloading = true; location.reload();
+    });
+  });
+}
+
+function showUpdateBanner(worker) {
+  if (document.getElementById("updateBanner")) return;
+  const b = document.createElement("div");
+  b.id = "updateBanner";
+  b.className = "update-banner";
+  b.textContent = "⬆️ Update available — tap to refresh";
+  b.onclick = () => { b.textContent = "Updating…"; b.classList.add("busy"); worker.postMessage("SKIP_WAITING"); };
+  document.body.appendChild(b);
 }

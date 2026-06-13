@@ -1,5 +1,5 @@
 /* Service worker — offline cache. Bump CACHE when files change. */
-const CACHE = "poker-academy-v10";
+const CACHE = "poker-academy-v11";
 const ASSETS = [
   "./", "./index.html", "./manifest.webmanifest",
   "./css/styles.css",
@@ -9,7 +9,13 @@ const ASSETS = [
 ];
 
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // Cache assets but DON'T auto-activate — wait so the app can offer "tap to refresh".
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
+});
+
+// App tells us to activate the new version (from the update banner).
+self.addEventListener("message", e => {
+  if (e.data === "SKIP_WAITING" || (e.data && e.data.type === "SKIP_WAITING")) self.skipWaiting();
 });
 
 self.addEventListener("activate", e => {
