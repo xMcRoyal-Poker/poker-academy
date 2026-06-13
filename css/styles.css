@@ -191,3 +191,16 @@ h1.page{font-size:22px;margin:18px 2px 4px}
 .toast{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);background:var(--grad);color:#fff;
   padding:10px 18px;border-radius:20px;font-size:13px;font-weight:700;z-index:150;box-shadow:0 4px 20px #0007;animation:pop .3s ease}
 @keyframes pop{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
+
+/* ===== native-feel polish: screen fade + tactile press states ===== */
+@keyframes appfade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.btn,.task,.choice,.leak,.lvl-row,.nav a,.option,.card[onclick]{
+  transition:transform .08s ease, opacity .12s ease, border-color .15s ease, background .15s ease;
+  -webkit-touch-callout:none; user-select:none;
+}
+.btn:active,.task:active,.choice:active,.leak:active,.lvl-row:active,.nav a:active{transform:scale(.975);opacity:.92}
+.btn:active{filter:brightness(1.05)}
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:.001s!important}
+  .btn:active,.task:active,.choice:active,.leak:active{transform:none}
+}

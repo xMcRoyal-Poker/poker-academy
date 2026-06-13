@@ -143,12 +143,21 @@ PT.UI = (function () {
     (s.activityLog || []).forEach(e => { if (e.date === today && c[e.type] != null) c[e.type]++; });
     return c;
   }
+  function haptic(ms) { try { if (navigator.vibrate) navigator.vibrate(ms || 8); } catch (_) {} }
+
   function modal(html) {
     const o = document.createElement("div");
     o.className = "overlay";
-    o.innerHTML = `<div class="lu-card">${html}</div>`;
+    o.innerHTML = `<div class="lu-card" tabindex="-1" role="dialog" aria-modal="true">${html}</div>`;
     o.addEventListener("click", e => { if (e.target === o) o.remove(); });
+    // Escape-to-close; self-unregisters once the overlay is gone (no leak)
+    const onKey = e => {
+      if (!document.body.contains(o)) { document.removeEventListener("keydown", onKey); return; }
+      if (e.key === "Escape") o.remove();
+    };
+    document.addEventListener("keydown", onKey);
     document.body.appendChild(o);
+    const card = o.querySelector(".lu-card"); if (card) card.focus();
     return o;
   }
 
@@ -391,6 +400,7 @@ PT.UI = (function () {
       session.picked = +b.dataset.pick;
       session.answered = true;
       const correct = session.picked === d.answer;
+      haptic(correct ? 8 : 18);
       if (correct) { session.correct++; s.xp += PT.XP.PER_CORRECT; }
       PT.Store.recordAnswer(s, d.concept, correct);
       (session.results = session.results || []).push({ concept: d.concept, title: d.question.slice(0, 60), correct });
@@ -743,5 +753,33 @@ PT.UI = (function () {
     $("#pcClose", o).onclick = () => { o.remove(); checkLevelThenRender(() => PT.go("home")); };
   }
 
-  return { onboard, home, drill, progress, leaks, playlog };
+  /* ============================================================
+     ERROR BOUNDARY — never white-screen; offer safe recovery
+     ============================================================ */
+  function errorScreen(err) {
+    app().innerHTML = `
+      <h1 class="page">Something went off 😕</h1>
+      <p class="sub">A screen failed to load — but your progress is safe in storage. Try reloading. If it keeps happening, export a backup, then reset.</p>
+      <div class="card" style="text-align:left">
+        <div class="assignrow muted" style="font-size:12px">${esc(String(err && err.message || err || "Unknown error")).slice(0, 200)}</div>
+      </div>
+      <button class="btn btn-primary btn-full btn-lg mt" id="errReload">↻ Reload the app</button>
+      <button class="btn btn-secondary btn-full" id="errExport" style="margin-top:8px">⬇️ Export a backup</button>
+      <button class="btn btn-secondary btn-full" id="errReset" style="margin-top:8px">Reset (last resort)</button>
+    `;
+    $("#errReload").onclick = () => location.reload();
+    $("#errExport").onclick = () => {
+      try {
+        const blob = new Blob([JSON.stringify(PT.state, null, 2)], { type: "application/json" });
+        const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "poker-progress.json";
+        document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+        toast("Backup exported");
+      } catch (e) { toast("Export failed — try reloading"); }
+    };
+    $("#errReset").onclick = () => {
+      if (confirm("Reset all progress? Export a backup first if you can.")) { PT.state = PT.Store.reset(); location.reload(); }
+    };
+  }
+
+  return { onboard, home, drill, progress, leaks, playlog, errorScreen };
 })();

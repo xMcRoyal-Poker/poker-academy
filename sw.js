@@ -1,5 +1,5 @@
 /* Service worker — offline cache. Bump CACHE when files change. */
-const CACHE = "poker-academy-v9";
+const CACHE = "poker-academy-v10";
 const ASSETS = [
   "./", "./index.html", "./manifest.webmanifest",
   "./css/styles.css",

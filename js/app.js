@@ -21,17 +21,33 @@ PT.go = function (route) {
 };
 
 function render(route) {
-  // First-run: force onboarding (Steps 1-2 of the book), no nav chrome.
-  if (!PT.state.profile || !PT.state.profile.onboarded) {
-    PT.UI.onboard();
-    const nav = document.querySelector(".nav");
-    if (nav) nav.remove();
+  try {
+    // First-run: force onboarding (Steps 1-2 of the book), no nav chrome.
+    if (!PT.state.profile || !PT.state.profile.onboarded) {
+      PT.UI.onboard();
+      const nav = document.querySelector(".nav");
+      if (nav) nav.remove();
+      window.scrollTo(0, 0);
+      return;
+    }
+    (ROUTES[route] || ROUTES.home)();
+    renderNav(route);
     window.scrollTo(0, 0);
-    return;
+    fadeIn();
+  } catch (e) {
+    // Error boundary: never white-screen. Show a safe recovery screen.
+    console.error("render failed", e);
+    if (PT.UI.errorScreen) PT.UI.errorScreen(e);
   }
-  (ROUTES[route] || ROUTES.home)();
-  renderNav(route);
-  window.scrollTo(0, 0);
+}
+
+// Subtle screen-change fade (native feel)
+function fadeIn() {
+  const a = document.getElementById("app");
+  if (!a) return;
+  a.style.animation = "none";
+  void a.offsetWidth; // reflow to restart the animation
+  a.style.animation = "appfade .18s ease";
 }
 
 function renderNav(active) {

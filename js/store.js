@@ -5,9 +5,11 @@ window.PT = window.PT || {};
 
 PT.Store = {
   KEY: "poker-trainer-v1",
+  VERSION: 2, // bump when the saved-data shape changes; migrate() handles upgrades
 
   default() {
     return {
+      schemaVersion: 2,
       // Step 1 (destination) + Step 2 (SMART goal) — set in first-run onboarding
       profile: { onboarded: false, why: "", level: "", commitment: "", goal: "" },
       xp: 0,
@@ -41,11 +43,45 @@ PT.Store = {
     try {
       const raw = localStorage.getItem(this.KEY);
       if (!raw) { const d = this.default(); this.save(d); return d; }
-      return Object.assign(this.default(), JSON.parse(raw));
+      const parsed = JSON.parse(raw);
+      const migrated = this.migrate(parsed);
+      const merged = Object.assign(this.default(), migrated); // backfill any new keys
+      const safe = this.sanitize(merged);                     // coerce wrong types
+      safe.schemaVersion = this.VERSION;
+      this.save(safe);
+      return safe;
     } catch (e) {
-      console.warn("store load failed, resetting", e);
+      console.warn("store load failed — preserving a backup, then resetting", e);
+      try { localStorage.setItem(this.KEY + "-corrupt-backup", localStorage.getItem(this.KEY) || ""); } catch (_) {}
       const d = this.default(); this.save(d); return d;
     }
+  },
+
+  // Upgrade older saved shapes to the current one (idempotent, never throws).
+  migrate(data) {
+    if (!data || typeof data !== "object") return {};
+    const v = data.schemaVersion || 1;
+    if (v < 2) {
+      // v1 used sessionIndex + todayTasks; v2 uses moduleIndex + activityLog
+      if (data.moduleIndex == null && typeof data.sessionIndex === "number") data.moduleIndex = data.sessionIndex;
+      delete data.sessionIndex;
+      delete data.todayTasks;
+      if (!Array.isArray(data.activityLog)) data.activityLog = [];
+    }
+    return data;
+  },
+
+  // Coerce fields to their expected types so a corrupt/partial blob can't crash the UI.
+  sanitize(s) {
+    const d = this.default();
+    const arrays = ["phasesComplete", "activityLog", "flaggedLeaks", "playLog", "seenBadges"];
+    arrays.forEach(k => { if (!Array.isArray(s[k])) s[k] = []; });
+    const objects = ["profile", "conceptStats", "srs"];
+    objects.forEach(k => { if (!s[k] || typeof s[k] !== "object" || Array.isArray(s[k])) s[k] = d[k]; });
+    const numbers = ["xp", "streak", "sessionsDone", "totalDrills", "correctDrills", "phase", "moduleIndex", "sessionsOnModule", "lastLevel"];
+    numbers.forEach(k => { if (typeof s[k] !== "number" || isNaN(s[k])) s[k] = d[k]; });
+    if (!s.profile || typeof s.profile.onboarded !== "boolean") s.profile = Object.assign(d.profile, s.profile || {});
+    return s;
   },
 
   save(s) {
