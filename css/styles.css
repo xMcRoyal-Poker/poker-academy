@@ -15,7 +15,7 @@ body{
   line-height:1.5; overscroll-behavior-y:contain;
 }
 #app{max-width:520px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;
-  padding:0 16px calc(78px + env(safe-area-inset-bottom)) 16px;}
+  padding:calc(env(safe-area-inset-top) + 8px) 16px calc(78px + env(safe-area-inset-bottom)) 16px;}
 button{font-family:inherit;cursor:pointer;border:none}
 .hide{display:none!important}
 
@@ -60,7 +60,8 @@ button{font-family:inherit;cursor:pointer;border:none}
 
 /* quick actions */
 .actions{display:flex;gap:8px;margin-top:14px}
-.btn{border-radius:10px;padding:13px 10px;font-size:13px;font-weight:700;flex:1;text-align:center}
+.btn{border-radius:10px;padding:13px 10px;font-size:13px;font-weight:700;text-align:center}
+.actions .btn{flex:1}
 .btn-primary{background:var(--grad);color:#fff}
 .btn-secondary{background:#1e1e3a;color:#aaa;border:1px solid var(--line)}
 .btn-full{width:100%}
