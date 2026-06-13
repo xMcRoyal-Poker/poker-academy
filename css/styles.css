@@ -46,6 +46,9 @@ button{font-family:inherit;cursor:pointer;border:none}
 .focusrow b{color:#2ecc71}
 .statrow{background:#1c1c3a;border:1px solid #667eea44;border-radius:10px;padding:10px 13px;font-size:13px;color:#cdd;margin:-2px 0 10px}
 .statrow b{color:var(--accent)}
+.assignrow{font-size:13px;color:#cdd;padding:6px 0;line-height:1.55;border-bottom:1px solid #ffffff0d}
+.assignrow:last-child{border-bottom:none}
+.assignrow b{color:var(--accent)}
 
 /* mission */
 .mission{background:var(--card2);border:1px solid #667eea44;border-radius:var(--r);padding:14px;margin-bottom:6px}

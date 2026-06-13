@@ -112,18 +112,58 @@ PT.UI = (function () {
   /* ============================================================
      HOME — Dashboard
      ============================================================ */
+  /* ---------- activity log · grace-streak · modal ---------- */
+  function localDay() {
+    const d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function daysBetween(a, b) { // "YYYY-MM-DD" → whole days
+    const pa = a.split("-").map(Number), pb = b.split("-").map(Number);
+    return Math.round((Date.UTC(pb[0], pb[1] - 1, pb[2]) - Date.UTC(pa[0], pa[1] - 1, pa[2])) / 86400000);
+  }
+  // Study-day streak with a 4-day grace: counts once per active day; resets only after a 4+ day gap.
+  function touchStreak(s) {
+    const today = localDay();
+    if (s.lastActiveDay === today) return; // already counted today
+    s.streak = (s.lastActiveDay && daysBetween(s.lastActiveDay, today) <= 4) ? (s.streak || 0) + 1 : 1;
+    s.lastActiveDay = today;
+    if (s.streak % 7 === 0) { s.xp += PT.XP.STREAK_BONUS; toast(`🔥 ${s.streak}-day streak +${PT.XP.STREAK_BONUS} XP`); }
+  }
+  // Log an activity (read/drill/review) for coach review + count it toward streak & module.
+  function logActivity(s, type, detail) {
+    s.activityLog = s.activityLog || [];
+    const m = curSession(s);
+    s.activityLog.push(Object.assign({ date: localDay(), type, module: m ? m.domino + " " + m.title : "" }, detail || {}));
+    s.sessionsDone = (s.sessionsDone || 0) + 1;
+    s.sessionsOnModule = (s.sessionsOnModule || 0) + 1;
+    touchStreak(s);
+  }
+  function todayCounts(s) {
+    const today = localDay(), c = { read: 0, drill: 0, review: 0 };
+    (s.activityLog || []).forEach(e => { if (e.date === today && c[e.type] != null) c[e.type]++; });
+    return c;
+  }
+  function modal(html) {
+    const o = document.createElement("div");
+    o.className = "overlay";
+    o.innerHTML = `<div class="lu-card">${html}</div>`;
+    o.addEventListener("click", e => { if (e.target === o) o.remove(); });
+    document.body.appendChild(o);
+    return o;
+  }
+
   function home() {
     const s = PT.state;
     const lvl = PT.Game.levelFor(s);
     const prog = PT.Game.progress(s);
     const sess = curSession(s);
     const phase = curPhase(s);
-    const t = s.todayTasks;
+    const tc = todayCounts(s);
 
     app().innerHTML = `
       <div class="topbar">
         <div class="hi">👋 Hey <b>Ido</b></div>
-        <div class="streak">🔥 ${s.streak}-session streak</div>
+        <div class="streak">🔥 ${s.streak || 0}-day streak</div>
       </div>
 
       <div class="xpwrap">
@@ -143,32 +183,22 @@ PT.UI = (function () {
       <div class="modtitle">${sess ? "♦ " + esc(sess.domino) + " · " + esc(sess.title) : ""}</div>
       ${sess && sess.focus ? `<div class="focusrow">🎯 <b>This sub-domino's focus:</b> ${esc(sess.focus)}</div>` : ""}
       ${sess && sess.stat ? `<div class="statrow">📊 <b>Track on 7XL:</b> ${esc(sess.stat)}</div>` : ""}
-      <div class="looprow">Session loop: Prepare → Perform → Evaluate → Analyze · Session ${(s.sessionsOnModule || 0) + 1} on this sub-domino</div>
+      <div class="looprow">Pick today's work — do any of these, as many as you like. No fixed session; each earns XP on its own.</div>
       <div class="mission">
-        <div class="task ${t.read ? "done" : ""}" data-act="read">
-          <span class="ic">📖</span>
-          <span>Read: ${esc(sess ? sess.read : "—")}</span>
-          ${t.read ? '<span class="go">✓</span>' : '<span class="go">→</span>'}
+        <div class="task" data-act="read">
+          <span class="ic">📖</span><span>Read assignment</span>
+          <span class="go">${tc.read ? "✓ " + tc.read + "×" : "→"}</span>
         </div>
-        <div class="task ${t.drills ? "done" : ""}" data-act="drills">
-          <span class="ic">🎯</span>
-          <span>5 drills (mixed)</span>
-          ${t.drills ? '<span class="go">✓</span>' : '<span class="go">→</span>'}
+        <div class="task" data-act="drills">
+          <span class="ic">🎯</span><span>Drill set (5)</span>
+          <span class="go">${tc.drill ? "✓ " + tc.drill + "×" : "→"}</span>
         </div>
-        <div class="task ${t.review ? "done" : ""}" data-act="review">
-          <span class="ic">📓</span>
-          <span>Session review (After-Action)</span>
-          ${t.review ? '<span class="go">✓</span>' : '<span class="go">→</span>'}
+        <div class="task" data-act="review">
+          <span class="ic">📓</span><span>Session review <small style="color:var(--dim)">· after you play</small></span>
+          <span class="go">${tc.review ? "✓ " + tc.review + "×" : "→"}</span>
         </div>
       </div>
-
-      <div class="actions">
-        <button class="btn btn-primary" data-act="drills">▶ Start Drills</button>
-        <button class="btn btn-secondary" data-act="review">📋 Log Hand</button>
-        <button class="btn btn-secondary" data-act="read">📚 Read</button>
-      </div>
-
-      ${(t.read && t.drills && t.review) ? `<button class="btn btn-primary btn-full btn-lg mt" data-act="finish">✅ Finish Session (+${PT.XP.DRILL_SESSION + PT.XP.READING + PT.XP.HAND_REVIEW} XP)</button>` : ""}
+      <div class="looprow center">Today: 📖 ${tc.read} · 🎯 ${tc.drill} · 📓 ${tc.review}</div>
 
       ${(s.sessionsOnModule || 0) >= 1 ? `<button class="btn btn-secondary btn-full mt" data-act="advance">✓ I've got this sub-domino — next one →</button>
       <div class="looprow center">Advance only when the skill feels solid (the book's way).</div>` : ""}
@@ -176,10 +206,9 @@ PT.UI = (function () {
 
     app().querySelectorAll("[data-act]").forEach(el => el.onclick = () => {
       const a = el.dataset.act;
-      if (a === "read") markRead();
-      else if (a === "drills") PT.go("drill");
+      if (a === "read") openReadModal();
+      else if (a === "drills") openDrillBrief();
       else if (a === "review") PT.go("playlog");
-      else if (a === "finish") finishSession();
       else if (a === "advance") advanceModule();
     });
   }
@@ -193,14 +222,69 @@ PT.UI = (function () {
       <a href="#leaks" style="color:#ff8a7a">Drill it →</a></div>`;
   }
 
-  function markRead() {
+  // READ popup — the full assignment for this sub-domino + a Complete button
+  function openReadModal() {
     const s = PT.state;
-    if (s.todayTasks.read) { home(); return; }
-    s.todayTasks.read = true;
-    s.xp += PT.XP.READING;
-    PT.Store.save(s);
-    toast(`📖 Reading done +${PT.XP.READING} XP`);
-    checkLevelThenRender(home);
+    const sess = curSession(s);
+    const phase = curPhase(s);
+    if (!sess) return;
+    const o = modal(`
+      <div class="lu-head">
+        <div class="lu-chip">READING ASSIGNMENT</div>
+        <div class="lu-name">♦ ${esc(sess.domino)} · ${esc(sess.title)}</div>
+        <div class="lu-sub">${esc(phase ? phase.books : "")}</div>
+      </div>
+      <div class="card" style="text-align:left">
+        <div class="assignrow"><b>📖 Read:</b> ${esc(sess.read)}</div>
+        ${sess.focus ? `<div class="assignrow"><b>🎯 Then do:</b> ${esc(sess.focus)}</div>` : ""}
+        ${sess.stat ? `<div class="assignrow"><b>📊 Track:</b> ${esc(sess.stat)}</div>` : ""}
+        <div class="assignrow muted" style="font-size:12px">Read this sub-domino's section in the book. If it's long, read what you can — re-open this next session. You advance when it clicks, not on a timer.</div>
+      </div>
+      <button class="btn btn-primary btn-full btn-lg" id="readDone">✓ Mark reading complete (+${PT.XP.READING} XP)</button>
+      <button class="btn btn-secondary btn-full" id="readClose" style="margin-top:8px">Close</button>
+    `);
+    $("#readDone", o).onclick = () => {
+      s.xp += PT.XP.READING;
+      logActivity(s, "read", { detail: sess.read });
+      PT.Store.save(s);
+      o.remove();
+      toast(`📖 Reading logged +${PT.XP.READING} XP`);
+      checkLevelThenRender(home);
+    };
+    $("#readClose", o).onclick = () => o.remove();
+  }
+
+  // DRILL briefing popup — what to expect, then Start
+  function openDrillBrief() {
+    const s = PT.state;
+    const list = pickDrills(s);
+    if (!list.length) { toast("No drills for this sub-domino yet"); return; }
+    const concepts = [...new Set(list.map(d => d.concept))].map(c => c.replace(/-/g, " ")).join(", ");
+    const ty = { flashcard: 0, mc: 0, scenario: 0 };
+    list.forEach(d => ty[d.type]++);
+    const bits = [];
+    if (ty.flashcard) bits.push(ty.flashcard + " flashcard" + (ty.flashcard > 1 ? "s" : ""));
+    if (ty.mc) bits.push(ty.mc + " multiple-choice");
+    if (ty.scenario) bits.push(ty.scenario + " live spot" + (ty.scenario > 1 ? "s" : ""));
+    const o = modal(`
+      <div class="lu-head">
+        <div class="lu-chip">DRILL SET · ${list.length} DRILLS</div>
+        <div class="lu-name">What to expect</div>
+        <div class="lu-sub">Concepts: ${esc(concepts)}</div>
+      </div>
+      <div class="card" style="text-align:left;font-size:13px;color:#cdd">
+        <div class="assignrow">You'll get a mix: ${esc(bits.join(" · "))}.</div>
+        <div class="assignrow muted">Flashcards: think, reveal, rate yourself honestly. Multiple-choice & spots: pick, get instant feedback + the why. Wrong answers quietly flag your weak spots for later.</div>
+      </div>
+      <button class="btn btn-primary btn-full btn-lg" id="drillStart">▶ Start drills (+${PT.XP.DRILL_SESSION} XP on finish)</button>
+      <button class="btn btn-secondary btn-full" id="drillCancel" style="margin-top:8px">Close</button>
+    `);
+    $("#drillStart", o).onclick = () => {
+      o.remove();
+      session = { list, i: 0, correct: 0, done: false, revealed: false, answered: false, results: [] };
+      PT.go("drill");
+    };
+    $("#drillCancel", o).onclick = () => o.remove();
   }
 
   /* ============================================================
@@ -210,7 +294,7 @@ PT.UI = (function () {
   function drill() {
     const s = PT.state;
     if (!session || session.done) {
-      session = { list: pickDrills(s), i: 0, correct: 0, done: false, revealed: false, answered: false };
+      session = { list: pickDrills(s), i: 0, correct: 0, done: false, revealed: false, answered: false, results: [] };
     }
     renderDrill();
   }
@@ -295,7 +379,9 @@ PT.UI = (function () {
       const r = b.dataset.rate;
       // SRS: hard -> next session, ok -> +2, easy -> +4
       s.srs[d.id] = s.sessionsDone + (r === "hard" ? 1 : r === "ok" ? 2 : 4);
-      PT.Store.recordAnswer(s, d.concept, r !== "hard");
+      const ok = r !== "hard";
+      PT.Store.recordAnswer(s, d.concept, ok);
+      (session.results = session.results || []).push({ concept: d.concept, title: d.question.slice(0, 60), correct: ok });
       PT.Store.save(s);
       advance();
     });
@@ -307,6 +393,7 @@ PT.UI = (function () {
       const correct = session.picked === d.answer;
       if (correct) { session.correct++; s.xp += PT.XP.PER_CORRECT; }
       PT.Store.recordAnswer(s, d.concept, correct);
+      (session.results = session.results || []).push({ concept: d.concept, title: d.question.slice(0, 60), correct });
       PT.Store.save(s);
       renderDrill();
     });
@@ -327,19 +414,34 @@ PT.UI = (function () {
   function finishDrills() {
     const s = PT.state;
     session.done = true;
-    if (!s.todayTasks.drills) {
-      s.todayTasks.drills = true;
-      s.xp += PT.XP.DRILL_SESSION;
-    }
+    const total = session.list.length;
+    const results = session.results || [];
+    // Score from ALL results (flashcard "Got it/Easy" count as correct, "Hard" doesn't) — honest accuracy.
+    const correctCount = results.filter(r => r.correct).length;
+    const acc = total ? Math.round((correctCount / total) * 100) : 0;
+    const missed = results.filter(r => !r.correct);
+    const missedConcepts = [...new Set(missed.map(r => r.concept))].map(c => c.replace(/-/g, " "));
+
+    // award XP + log this drill set for coach review (in the export JSON)
+    s.xp += PT.XP.DRILL_SESSION;
+    logActivity(s, "drill", {
+      correct: correctCount, total, accuracy: acc,
+      concepts: [...new Set(session.list.map(d => d.concept))],
+      missed: missed.map(r => ({ concept: r.concept, q: r.title }))
+    });
     PT.Store.save(s);
-    const acc = Math.round((session.correct / session.list.length) * 100);
+
     app().innerHTML = `
       <h1 class="page">Drills complete 🎯</h1>
       <div class="stats">
-        <div class="stat"><div class="num">${session.correct}/${session.list.length}</div><div class="lab">Correct</div></div>
+        <div class="stat"><div class="num">${correctCount}/${total}</div><div class="lab">Correct</div></div>
         <div class="stat"><div class="num">${acc}%</div><div class="lab">Accuracy</div></div>
         <div class="stat"><div class="num">+${PT.XP.DRILL_SESSION}</div><div class="lab">XP</div></div>
       </div>
+      ${missedConcepts.length
+        ? `<div class="focusrow" style="border-color:#e74c3c44"><b style="color:#ff8a7a">Worth another look:</b> ${esc(missedConcepts.join(", "))}</div>`
+        : `<div class="focusrow"><b>Clean sweep</b> — nailed all ${total}. 🔥</div>`}
+      <div class="looprow center">📓 Saved to your log — it'll show up when you export for the coach.</div>
       <button class="btn btn-primary btn-full btn-lg mt" id="back">Back to Today</button>
     `;
     $("#back").onclick = () => checkLevelThenRender(() => PT.go("home"));
@@ -472,7 +574,7 @@ PT.UI = (function () {
     PT.Store.save(s);
     const drills = PT.DRILLS.filter(d => leak.concepts.includes(d.concept)).slice(0, 5);
     if (!drills.length) { toast("No drills yet for this leak — coming with the books"); return; }
-    session = { list: drills, i: 0, correct: 0, done: false, revealed: false, answered: false };
+    session = { list: drills, i: 0, correct: 0, done: false, revealed: false, answered: false, results: [] };
     PT.go("drill");
   }
 
@@ -524,7 +626,8 @@ PT.UI = (function () {
       if (!Object.values(fields).some(Boolean)) { toast("Fill in at least one field"); return; }
       const summary = `${fields.rate || "Reviewed"}${fields.focus ? " · focus: " + fields.focus : ""}${fields.mistakes ? " · " + fields.mistakes.slice(0, 40) : ""}`;
       s.playLog.push({ when: dateStr(), kind: "Session review", summary, detail: fields });
-      if (!s.todayTasks.review) { s.todayTasks.review = true; s.xp += PT.XP.HAND_REVIEW; }
+      s.xp += PT.XP.HAND_REVIEW;
+      logActivity(s, "review", { detail: fields });
       PT.Store.save(s);
       toast(`📓 Review saved +${PT.XP.HAND_REVIEW} XP`);
       checkLevelThenRender(() => PT.go("home"));
@@ -547,24 +650,6 @@ PT.UI = (function () {
   /* ============================================================
      SESSION COMPLETION + LEVEL-UP overlay
      ============================================================ */
-  // Complete one session on the CURRENT sub-domino. Does NOT advance the
-  // module — that's the self-paced "next sub-domino" button (advanceModule).
-  function finishSession() {
-    const s = PT.state;
-    const t = s.todayTasks;
-    if (!(t.read && t.drills && t.review)) { toast("Finish all 3 tasks first"); return; }
-
-    s.sessionsDone++;
-    s.sessionsOnModule = (s.sessionsOnModule || 0) + 1;
-    s.streak++;
-    if (s.streak % 7 === 0) { s.xp += PT.XP.STREAK_BONUS; toast(`🔥 7-streak +${PT.XP.STREAK_BONUS} XP`); }
-
-    s.todayTasks = { read: false, drills: false, review: false };
-    PT.Store.save(s);
-    toast("✅ Session done — keep going or advance when solid");
-    checkLevelThenRender(() => PT.go("home"));
-  }
-
   // Self-paced: advance to the next sub-domino; completing a phase's last
   // module = phase complete (level gate + celebration).
   function advanceModule() {
@@ -582,12 +667,10 @@ PT.UI = (function () {
       const next = PT.CURRICULUM.phases.find(p => p.id === phase.id + 1);
       if (next) { s.phase = next.id; s.moduleIndex = 0; }
       else { s.moduleIndex = phase.modules.length - 1; } // curriculum complete; stay
-      s.todayTasks = { read: false, drills: false, review: false };
       PT.Store.save(s);
       showPhaseComplete(phase);
       return;
     }
-    s.todayTasks = { read: false, drills: false, review: false };
     PT.Store.save(s);
     toast(`Next: ${phase.modules[s.moduleIndex].domino} ${phase.modules[s.moduleIndex].title}`);
     checkLevelThenRender(() => PT.go("home"));

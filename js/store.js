@@ -19,8 +19,9 @@ PT.Store = {
       moduleIndex: 0,       // index into current phase's modules (sub-dominoes)
       sessionsOnModule: 0,  // how many sessions done on the current sub-domino (self-paced)
       phasesComplete: [],   // [1,2,...]
-      // per-session task completion flags, reset each session
-      todayTasks: { read: false, drills: false, review: false },
+      // activity history (for coach review via the export JSON)
+      activityLog: [],      // { date, type:'read'|'drill'|'review', module, ...detail }
+      lastActiveDay: null,  // YYYY-MM-DD of last activity — powers the grace-streak
       // leak tracking: { concept: {wrong, total} }
       conceptStats: {},
       // flagged leaks (from menu or coach)
