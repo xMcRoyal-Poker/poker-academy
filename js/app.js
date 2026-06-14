@@ -87,12 +87,12 @@ if ("serviceWorker" in navigator) {
       });
     }).catch(() => {});
 
-    let reloading = false;
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (reloading) return; reloading = true; location.reload();
-    });
+    navigator.serviceWorker.addEventListener("controllerchange", () => doReload());
   });
 }
+
+let __reloading = false;
+function doReload() { if (__reloading) return; __reloading = true; location.reload(); }
 
 function showUpdateBanner(worker) {
   if (document.getElementById("updateBanner")) return;
@@ -100,6 +100,18 @@ function showUpdateBanner(worker) {
   b.id = "updateBanner";
   b.className = "update-banner";
   b.textContent = "⬆️ Update available — tap to refresh";
-  b.onclick = () => { b.textContent = "Updating…"; b.classList.add("busy"); worker.postMessage("SKIP_WAITING"); };
+  b.onclick = () => {
+    b.textContent = "Updating…"; b.classList.add("busy");
+    try { worker.postMessage("SKIP_WAITING"); } catch (_) {}
+    // Alternate trigger if 'controllerchange' is slow/absent on iOS
+    try { worker.addEventListener("statechange", () => { if (worker.state === "activated") doReload(); }); } catch (_) {}
+    // Safety net: if the handoff stalls, stop spinning and give the guaranteed fix
+    setTimeout(() => {
+      if (__reloading) return;
+      b.classList.remove("busy");
+      b.textContent = "Almost there — fully close & reopen the app to finish";
+      b.onclick = () => location.reload();
+    }, 3500);
+  };
   document.body.appendChild(b);
 }
