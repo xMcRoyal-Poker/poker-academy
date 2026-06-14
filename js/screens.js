@@ -208,7 +208,7 @@ PT.UI = (function () {
       <div class="looprow">Pick today's work — do any of these, as many as you like. No fixed session; each earns XP on its own.</div>
       <div class="mission">
         <div class="task" data-act="read">
-          <span class="ic">📖</span><span>Read assignment</span>
+          <span class="ic">📖</span><span>Read assignment ${sess && (s.readCredited || {})[sess.domino] ? '<small style="color:var(--green)">· done ✓</small>' : ""}</span>
           <span class="go">${tc.read ? "✓ " + tc.read + "×" : "→"}</span>
         </div>
         <div class="task" data-act="drills">
@@ -250,9 +250,10 @@ PT.UI = (function () {
     const sess = curSession(s);
     const phase = curPhase(s);
     if (!sess) return;
+    const credited = !!(s.readCredited || {})[sess.domino];
     const o = modal(`
       <div class="lu-head">
-        <div class="lu-chip">READING ASSIGNMENT</div>
+        <div class="lu-chip">READING ASSIGNMENT${credited ? " · DONE ✓" : ""}</div>
         <div class="lu-name">♦ ${esc(sess.domino)} · ${esc(sess.title)}</div>
         <div class="lu-sub">${esc(phase ? phase.books : "")}</div>
       </div>
@@ -260,17 +261,22 @@ PT.UI = (function () {
         <div class="assignrow"><b>📖 Read:</b> ${esc(sess.read)}</div>
         ${sess.focus ? `<div class="assignrow"><b>🎯 Then do:</b> ${esc(sess.focus)}</div>` : ""}
         ${sess.stat ? `<div class="assignrow"><b>📊 Track:</b> ${esc(sess.stat)}</div>` : ""}
-        <div class="assignrow muted" style="font-size:12px">Read this sub-domino's section in the book. If it's long, read what you can — re-open this next session. You advance when it clicks, not on a timer.</div>
+        <div class="assignrow muted" style="font-size:12px">${credited
+          ? "You've already read this one (XP credited). It stays here until you tap <b>“next sub-domino”</b> on Today — re-read freely, then advance when it's solid."
+          : "Read this sub-domino's section in the book. The same assignment stays until you advance — you move on when it clicks, not on a timer."}</div>
       </div>
-      <button class="btn btn-primary btn-full btn-lg" id="readDone">✓ Mark reading complete (+${PT.XP.READING} XP)</button>
+      ${credited
+        ? `<button class="btn btn-secondary btn-full btn-lg" id="readDone">📖 Mark re-read (already credited)</button>`
+        : `<button class="btn btn-primary btn-full btn-lg" id="readDone">✓ Mark reading complete (+${PT.XP.READING} XP)</button>`}
       <button class="btn btn-secondary btn-full" id="readClose" style="margin-top:8px">Close</button>
     `);
     $("#readDone", o).onclick = () => {
-      s.xp += PT.XP.READING;
-      logActivity(s, "read", { detail: sess.read });
+      let gain = 0;
+      if (!credited) { gain = PT.XP.READING; s.xp += gain; (s.readCredited = s.readCredited || {})[sess.domino] = true; }
+      logActivity(s, "read", { detail: sess.read, credited: !credited });
       PT.Store.save(s);
       o.remove();
-      toast(`📖 Reading logged +${PT.XP.READING} XP`);
+      toast(gain ? `📖 Reading logged +${gain} XP` : "📖 Re-read logged (XP already earned)");
       checkLevelThenRender(home);
     };
     $("#readClose", o).onclick = () => o.remove();

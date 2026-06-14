@@ -32,6 +32,8 @@ PT.Store = {
       srs: {},
       // drillId -> times answered (powers no-repeat + "pool exhausted")
       drilled: {},
+      // sub-domino -> true once its reading XP has been credited (read XP counts once)
+      readCredited: {},
       // free-practice daily XP cap tracking
       practiceDay: null,
       practiceXpToday: 0,
@@ -81,7 +83,7 @@ PT.Store = {
     const d = this.default();
     const arrays = ["phasesComplete", "activityLog", "flaggedLeaks", "playLog", "seenBadges"];
     arrays.forEach(k => { if (!Array.isArray(s[k])) s[k] = []; });
-    const objects = ["profile", "conceptStats", "srs", "drilled"];
+    const objects = ["profile", "conceptStats", "srs", "drilled", "readCredited"];
     objects.forEach(k => { if (!s[k] || typeof s[k] !== "object" || Array.isArray(s[k])) s[k] = d[k]; });
     const numbers = ["xp", "streak", "sessionsDone", "totalDrills", "correctDrills", "phase", "moduleIndex", "sessionsOnModule", "lastLevel"];
     numbers.forEach(k => { if (typeof s[k] !== "number" || isNaN(s[k])) s[k] = d[k]; });
