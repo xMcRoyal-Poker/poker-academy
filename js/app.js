@@ -9,7 +9,8 @@ if (!PT.state.created) { PT.state.created = new Date().toISOString(); PT.Store.s
 const ROUTES = {
   onboard: PT.UI.onboard,
   home: PT.UI.home,
-  drill: PT.UI.drill,
+  drill: PT.UI.drill,         // active drill session (entered from Today or Practice)
+  practice: PT.UI.practice,   // free-practice topic menu (nav tab)
   progress: PT.UI.progress,
   leaks: PT.UI.leaks,
   playlog: PT.UI.playlog
@@ -59,11 +60,12 @@ function renderNav(active) {
   }
   const items = [
     ["home", "🏠", "Today"],
-    ["drill", "🎯", "Drill"],
+    ["practice", "🃏", "Practice"],
     ["leaks", "🩹", "Leaks"],
     ["playlog", "📋", "Play"],
     ["progress", "📈", "Stats"]
   ];
+  if (active === "drill") active = "practice"; // keep a tab lit during an active session
   nav.innerHTML = items.map(([r, ic, lab]) =>
     `<a href="#${r}" class="${active === r ? "active" : ""}"><span class="ni">${ic}</span>${lab}</a>`).join("");
 }

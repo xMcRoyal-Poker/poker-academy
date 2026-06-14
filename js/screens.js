@@ -32,31 +32,44 @@ PT.UI = (function () {
     return list[Math.min(s.moduleIndex || 0, list.length - 1)] || null;
   }
   // Pick 5 drills for this session: prefer matching concepts, prioritize weak spots & SRS-due, fall back to phase
-  function pickDrills(s) {
-    const sess = curSession(s);
-    const wantConcepts = new Set(sess ? sess.concepts : []);
-    // Interleaving: a session can pull drills from its own phase OR any drill
-    // whose concept the session explicitly lists (e.g. a postflop week that
-    // reinforces the Learning Process Model still surfaces that study drill).
-    const phaseDrills = PT.DRILLS.filter(d => d.phase === s.phase || wantConcepts.has(d.concept));
-    const flagged = new Set([...(s.flaggedLeaks || []), ...PT.Store.weakSpots(s).map(w => w.concept)]);
-
-    const scored = phaseDrills.map(d => {
-      let score = 0;
-      if (wantConcepts.has(d.concept)) score += 3;
-      if (flagged.has(d.concept)) score += 2;             // boost weak spots
-      if ((s.srs[d.id] || 0) <= s.sessionsDone) score += 1; // due for review
-      return { d, score };
-    }).sort((a, b) => b.score - a.score);
-
-    let chosen = scored.map(x => x.d).slice(0, 5);
-    // pad from other phases if a fresh phase has <5
-    if (chosen.length < 5) {
-      const extra = PT.DRILLS.filter(d => !chosen.includes(d)).slice(0, 5 - chosen.length);
-      chosen = chosen.concat(extra);
-    }
-    return chosen;
+  // The subject pool = every drill whose concept belongs to these concepts.
+  function poolFor(concepts) {
+    const set = new Set(concepts || []);
+    return PT.DRILLS.filter(d => set.has(d.concept));
   }
+  // Interleave types so a set isn't all-flashcard: decisions (scenario/mc) first, round-robin.
+  function mixTypes(list) {
+    const buckets = { scenario: [], mc: [], flashcard: [] };
+    list.forEach(d => (buckets[d.type] || buckets.flashcard).push(d));
+    const out = [];
+    let added = true;
+    while (added) {
+      added = false;
+      for (const t of ["scenario", "mc", "flashcard"]) {
+        if (buckets[t].length) { out.push(buckets[t].shift()); added = true; }
+      }
+    }
+    return out;
+  }
+  // DAILY set: only UNSEEN drills from the current sub-domino's pool. No repeats, no padding.
+  function dailyDrillSet(s) {
+    const sess = curSession(s);
+    const pool = poolFor(sess ? sess.concepts : []);
+    const drilled = s.drilled || {};
+    const unseen = pool.filter(d => !drilled[d.id]);
+    if (!unseen.length) return { drills: [], exhausted: true, total: pool.length };
+    const drills = mixTypes(unseen).slice(0, 5);
+    return { drills, exhausted: false, total: pool.length, remaining: unseen.length, freshIds: drills.map(d => d.id) };
+  }
+  // PRACTICE set: any drills for a chosen concept (repeats OK for review), least-seen first, mixed.
+  function practiceDrillSet(concept) {
+    const pool = poolFor([concept]);
+    const drilled = PT.state.drilled || {};
+    const ordered = pool.slice().sort((a, b) => (drilled[a.id] || 0) - (drilled[b.id] || 0));
+    return mixTypes(ordered).slice(0, 8);
+  }
+  // Backward-compatible helper (fallback if a session is entered directly).
+  function pickDrills(s) { return dailyDrillSet(s).drills; }
 
   /* ============================================================
      ONBOARDING — Step 1 (Destination) + Step 2 (SMART goal)
@@ -199,7 +212,7 @@ PT.UI = (function () {
           <span class="go">${tc.read ? "✓ " + tc.read + "×" : "→"}</span>
         </div>
         <div class="task" data-act="drills">
-          <span class="ic">🎯</span><span>Drill set (5)</span>
+          <span class="ic">🎯</span><span>Drill set ${(() => { const set = dailyDrillSet(s); return set.exhausted ? '<small style="color:var(--green)">· all drilled ✓</small>' : '<small style="color:var(--dim)">· ' + set.remaining + " new</small>"; })()}</span>
           <span class="go">${tc.drill ? "✓ " + tc.drill + "×" : "→"}</span>
         </div>
         <div class="task" data-act="review">
@@ -263,34 +276,52 @@ PT.UI = (function () {
     $("#readClose", o).onclick = () => o.remove();
   }
 
-  // DRILL briefing popup — what to expect, then Start
+  // DRILL briefing popup — fresh drills only; if the pool is exhausted, say so.
   function openDrillBrief() {
     const s = PT.state;
-    const list = pickDrills(s);
-    if (!list.length) { toast("No drills for this sub-domino yet"); return; }
-    const concepts = [...new Set(list.map(d => d.concept))].map(c => c.replace(/-/g, " ")).join(", ");
+    const set = dailyDrillSet(s);
+
+    if (set.exhausted) {
+      const o = modal(`
+        <div class="lu-head">
+          <div class="lu-chip">SUB-DOMINO DRILLS DONE</div>
+          <div class="lu-name">You've drilled all ${set.total} here ✓</div>
+          <div class="lu-sub">No new questions left for this sub-domino.</div>
+        </div>
+        <div class="card" style="text-align:left;font-size:13px;color:#cdd">
+          <div class="assignrow">Nice — you've seen every drill for this sub-domino. When the skill feels solid, advance to the next one. For spaced review, use <b>Practice</b> (bottom nav) — it replays these for a small XP bonus.</div>
+        </div>
+        <button class="btn btn-primary btn-full btn-lg" id="goPractice">🃏 Go to Practice</button>
+        <button class="btn btn-secondary btn-full" id="dClose" style="margin-top:8px">Close</button>
+      `);
+      $("#goPractice", o).onclick = () => { o.remove(); PT.go("practice"); };
+      $("#dClose", o).onclick = () => o.remove();
+      return;
+    }
+
+    const list = set.drills;
     const ty = { flashcard: 0, mc: 0, scenario: 0 };
     list.forEach(d => ty[d.type]++);
     const bits = [];
-    if (ty.flashcard) bits.push(ty.flashcard + " flashcard" + (ty.flashcard > 1 ? "s" : ""));
-    if (ty.mc) bits.push(ty.mc + " multiple-choice");
     if (ty.scenario) bits.push(ty.scenario + " live spot" + (ty.scenario > 1 ? "s" : ""));
+    if (ty.mc) bits.push(ty.mc + " multiple-choice");
+    if (ty.flashcard) bits.push(ty.flashcard + " flashcard" + (ty.flashcard > 1 ? "s" : ""));
     const o = modal(`
       <div class="lu-head">
-        <div class="lu-chip">DRILL SET · ${list.length} DRILLS</div>
+        <div class="lu-chip">${list.length} NEW DRILL${list.length > 1 ? "S" : ""}${set.remaining > list.length ? " · " + (set.remaining - list.length) + " more after" : ""}</div>
         <div class="lu-name">What to expect</div>
-        <div class="lu-sub">Concepts: ${esc(concepts)}</div>
+        <div class="lu-sub">${esc([...new Set(list.map(d => d.concept))].map(c => c.replace(/-/g, " ")).join(", "))}</div>
       </div>
       <div class="card" style="text-align:left;font-size:13px;color:#cdd">
-        <div class="assignrow">You'll get a mix: ${esc(bits.join(" · "))}.</div>
-        <div class="assignrow muted">Flashcards: think, reveal, rate yourself honestly. Multiple-choice & spots: pick, get instant feedback + the why. Wrong answers quietly flag your weak spots for later.</div>
+        <div class="assignrow">A mix: ${esc(bits.join(" · "))}.</div>
+        <div class="assignrow muted">Flashcards: think, reveal, rate honestly. MC & spots: pick, get the why. Only NEW questions — no repeats. (+5 XP per new drill.)</div>
       </div>
-      <button class="btn btn-primary btn-full btn-lg" id="drillStart">▶ Start drills (+${PT.XP.DRILL_SESSION} XP on finish)</button>
+      <button class="btn btn-primary btn-full btn-lg" id="drillStart">▶ Start (${list.length} new · +${list.length * 5} XP)</button>
       <button class="btn btn-secondary btn-full" id="drillCancel" style="margin-top:8px">Close</button>
     `);
     $("#drillStart", o).onclick = () => {
       o.remove();
-      session = { list, i: 0, correct: 0, done: false, revealed: false, answered: false, results: [] };
+      session = { list, i: 0, correct: 0, done: false, revealed: false, answered: false, results: [], practice: false, freshIds: set.freshIds };
       PT.go("drill");
     };
     $("#drillCancel", o).onclick = () => o.remove();
@@ -303,8 +334,10 @@ PT.UI = (function () {
   function drill() {
     const s = PT.state;
     if (!session || session.done) {
-      session = { list: pickDrills(s), i: 0, correct: 0, done: false, revealed: false, answered: false, results: [] };
+      const set = dailyDrillSet(s);
+      session = { list: set.drills, i: 0, correct: 0, done: false, revealed: false, answered: false, results: [], practice: false, freshIds: set.freshIds || [] };
     }
+    if (!session.list || !session.list.length) { toast("No new drills — try Practice or advance"); PT.go("home"); return; }
     renderDrill();
   }
 
@@ -401,7 +434,7 @@ PT.UI = (function () {
       session.answered = true;
       const correct = session.picked === d.answer;
       haptic(correct ? 8 : 18);
-      if (correct) { session.correct++; s.xp += PT.XP.PER_CORRECT; }
+      if (correct) { session.correct++; if (!session.practice) s.xp += PT.XP.PER_CORRECT; }
       PT.Store.recordAnswer(s, d.concept, correct);
       (session.results = session.results || []).push({ concept: d.concept, title: d.question.slice(0, 60), correct });
       PT.Store.save(s);
@@ -431,30 +464,95 @@ PT.UI = (function () {
     const acc = total ? Math.round((correctCount / total) * 100) : 0;
     const missed = results.filter(r => !r.correct);
     const missedConcepts = [...new Set(missed.map(r => r.concept))].map(c => c.replace(/-/g, " "));
+    const concepts = [...new Set(session.list.map(d => d.concept))];
 
-    // award XP + log this drill set for coach review (in the export JSON)
-    s.xp += PT.XP.DRILL_SESSION;
-    logActivity(s, "drill", {
-      correct: correctCount, total, accuracy: acc,
-      concepts: [...new Set(session.list.map(d => d.concept))],
-      missed: missed.map(r => ({ concept: r.concept, q: r.title }))
-    });
+    // mark everything in this set as drilled (no-repeat tracking)
+    s.drilled = s.drilled || {};
+    session.list.forEach(d => { s.drilled[d.id] = (s.drilled[d.id] || 0) + 1; });
+
+    let xpGain;
+    if (session.practice) {
+      // Free practice: small, daily-capped XP. No streak/session bump.
+      const today = localDay();
+      if (s.practiceDay !== today) { s.practiceDay = today; s.practiceXpToday = 0; }
+      const CAP = 20;
+      xpGain = Math.max(0, Math.min(correctCount * 2, CAP - (s.practiceXpToday || 0)));
+      s.practiceXpToday = (s.practiceXpToday || 0) + xpGain;
+      s.xp += xpGain;
+      s.activityLog = s.activityLog || [];
+      s.activityLog.push({ date: today, type: "practice", module: session.practiceLabel || "", correct: correctCount, total, accuracy: acc, concepts });
+    } else {
+      // Daily drill: XP only for NEW drills (kills repeat-farming).
+      const fresh = (session.freshIds || session.list.map(d => d.id)).length;
+      xpGain = Math.min(fresh * 5, 25);
+      s.xp += xpGain;
+      logActivity(s, "drill", {
+        correct: correctCount, total, accuracy: acc, fresh,
+        concepts, missed: missed.map(r => ({ concept: r.concept, q: r.title }))
+      });
+    }
     PT.Store.save(s);
 
+    const capNote = session.practice && (s.practiceXpToday >= 20)
+      ? `<div class="looprow center">Daily practice XP cap reached — extra practice is free (no XP) the rest of today.</div>` : "";
     app().innerHTML = `
-      <h1 class="page">Drills complete 🎯</h1>
+      <h1 class="page">${session.practice ? "Practice done 🃏" : "Drills complete 🎯"}</h1>
       <div class="stats">
         <div class="stat"><div class="num">${correctCount}/${total}</div><div class="lab">Correct</div></div>
         <div class="stat"><div class="num">${acc}%</div><div class="lab">Accuracy</div></div>
-        <div class="stat"><div class="num">+${PT.XP.DRILL_SESSION}</div><div class="lab">XP</div></div>
+        <div class="stat"><div class="num">+${xpGain}</div><div class="lab">XP</div></div>
       </div>
       ${missedConcepts.length
         ? `<div class="focusrow" style="border-color:#e74c3c44"><b style="color:#ff8a7a">Worth another look:</b> ${esc(missedConcepts.join(", "))}</div>`
         : `<div class="focusrow"><b>Clean sweep</b> — nailed all ${total}. 🔥</div>`}
-      <div class="looprow center">📓 Saved to your log — it'll show up when you export for the coach.</div>
-      <button class="btn btn-primary btn-full btn-lg mt" id="back">Back to Today</button>
+      ${session.practice ? capNote : `<div class="looprow center">📓 Saved to your log — shows up when you export for the coach.</div>`}
+      <button class="btn btn-primary btn-full btn-lg mt" id="back">${session.practice ? "Back to Practice" : "Back to Today"}</button>
     `;
-    $("#back").onclick = () => checkLevelThenRender(() => PT.go("home"));
+    $("#back").onclick = () => checkLevelThenRender(() => PT.go(session.practice ? "practice" : "home"));
+  }
+
+  /* ============================================================
+     PRACTICE — free menu: pick any topic, review-friendly, capped XP
+     ============================================================ */
+  function practice() {
+    const s = PT.state;
+    const drilled = s.drilled || {};
+    const by = {};
+    PT.DRILLS.forEach(d => {
+      const v = by[d.concept] || (by[d.concept] = { total: 0, seen: 0, phase: d.phase });
+      v.total++; if (drilled[d.id]) v.seen++;
+    });
+    const today = localDay();
+    const used = (s.practiceDay === today) ? (s.practiceXpToday || 0) : 0;
+    const phaseName = { 1: "Preflop + Study", 2: "Postflop", 3: "Tournaments" };
+    const entries = Object.entries(by).sort((a, b) => a[1].phase - b[1].phase || a[0].localeCompare(b[0]));
+    let lastPhase = null;
+    const rows = entries.map(([c, v]) => {
+      const head = v.phase !== lastPhase ? (lastPhase = v.phase, `<div class="label">${esc(phaseName[v.phase] || ("Phase " + v.phase))}</div>`) : "";
+      return head + `
+        <div class="leak" data-practice="${c}">
+          <span class="le">${v.seen >= v.total ? "✅" : "🎯"}</span>
+          <div style="flex:1">
+            <div class="lt">${esc(c.replace(/-/g, " "))}</div>
+            <div class="ld">drilled ${v.seen}/${v.total}${v.seen >= v.total ? " · all seen (review)" : ""}</div>
+          </div>
+          <span class="go" style="color:var(--accent)">→</span>
+        </div>`;
+    }).join("");
+
+    app().innerHTML = `
+      <h1 class="page">Practice 🃏</h1>
+      <p class="sub">Drill any topic — repeats welcome for review. Small XP (+2 per correct), <b>${Math.max(0, 20 - used)}/20 left today</b>. Practice doesn't touch your daily streak.</p>
+      ${rows}
+    `;
+    app().querySelectorAll("[data-practice]").forEach(el => el.onclick = () => startPractice(el.dataset.practice));
+  }
+
+  function startPractice(concept) {
+    const drills = practiceDrillSet(concept);
+    if (!drills.length) { toast("No drills for that topic yet"); return; }
+    session = { list: drills, i: 0, correct: 0, done: false, revealed: false, answered: false, results: [], practice: true, practiceLabel: concept };
+    PT.go("drill");
   }
 
   /* ============================================================
@@ -584,7 +682,7 @@ PT.UI = (function () {
     PT.Store.save(s);
     const drills = PT.DRILLS.filter(d => leak.concepts.includes(d.concept)).slice(0, 5);
     if (!drills.length) { toast("No drills yet for this leak — coming with the books"); return; }
-    session = { list: drills, i: 0, correct: 0, done: false, revealed: false, answered: false, results: [] };
+    session = { list: drills, i: 0, correct: 0, done: false, revealed: false, answered: false, results: [], practice: true, practiceLabel: "leak: " + leak.title };
     PT.go("drill");
   }
 
@@ -781,5 +879,5 @@ PT.UI = (function () {
     };
   }
 
-  return { onboard, home, drill, progress, leaks, playlog, errorScreen };
+  return { onboard, home, drill, practice, progress, leaks, playlog, errorScreen };
 })();

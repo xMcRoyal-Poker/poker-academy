@@ -237,6 +237,106 @@ PT.DRILLS = [
     explain: "One domino can topple another 50% bigger. Start small, study topics that build on each other, and over time you topple the 'mountain-sized' goal. Incremental beats scattershot."
   },
 
+  /* --- extra MC drills to deepen pools & balance the type mix (Phase 1 study) --- */
+  {
+    id: "p1-openminded-mc",
+    phase: 1, type: "mc", concept: "study-mindset",
+    source: "How to Study Poker V1 — Ch.2 (Open-minded)",
+    question: "A great poker mind is 'open-minded'. Which behavior shows it?",
+    choices: [
+      "Defending the way you've always played because it won before",
+      "Willing to test any new idea/line and drop one that's proven worse — no single 'right' way to play a hand",
+      "Copying whatever the biggest stack does",
+      "Refusing to study lines you find uncomfortable"
+    ],
+    answer: 1,
+    explain: "Open-minded = you put new strategies to the test and let results/logic update your game. There's no one right way to play a hand or spot."
+  },
+  {
+    id: "p1-takeaction-mc",
+    phase: 1, type: "mc", concept: "learn-from-books",
+    source: "How to Study Poker V1 — Ch.1 (take action)",
+    question: "You just finished a chapter. What's the highest-value next move?",
+    choices: [
+      "Immediately start the next chapter",
+      "Put ONE concrete thing from it into action in your next session",
+      "Re-read it twice to memorize it",
+      "Bookmark it to apply 'later'"
+    ],
+    answer: 1,
+    explain: "Action is the teacher. One applied takeaway per chapter beats passively consuming more pages — knowledge becomes skill only through reps."
+  },
+  {
+    id: "p1-ranges-mc",
+    phase: 1, type: "mc", concept: "thinking-in-ranges",
+    source: "How to Study Poker / JL — thinking in ranges",
+    question: "A super-tight player open-raises from under the gun. How should you think about their hand?",
+    choices: [
+      "They have exactly A-K",
+      "A RANGE — e.g. AA, KK, QQ, JJ, AK — that you narrow as the hand goes on",
+      "Impossible to know, so just play your cards",
+      "They're definitely bluffing"
+    ],
+    answer: 1,
+    explain: "Never assign one hand — assign a range and narrow it street by street. A tight UTG raiser is a tight range you can read against, not a single holding."
+  },
+  {
+    id: "p1-purposeful-mc",
+    phase: 1, type: "mc", concept: "purposeful-practice",
+    source: "How to Study Poker V1 — Ch.4 (purposeful practice)",
+    question: "Which is actually 'purposeful practice'?",
+    choices: [
+      "Watching random poker videos while half-paying-attention",
+      "Picking ONE skill, setting a goal, drilling it with focus, and measuring a stat before/after",
+      "Grinding as many tables as possible",
+      "Reading three strategy articles on different topics"
+    ],
+    answer: 1,
+    explain: "Purposeful practice = clear goal on ONE skill + focused reps + measurement. Scattered consumption isn't practice; 'only perfect practice makes perfect.'"
+  },
+  {
+    id: "p1-journal-mc",
+    phase: 1, type: "mc", concept: "poker-journal",
+    source: "How to Study Poker V1 — Step 5 (journal)",
+    question: "Which belongs in a post-session journal entry?",
+    choices: [
+      "Only the hands you won",
+      "Your strategy focus, mistakes made, baffling spots, any tilt, and a rating of your play",
+      "Just the final $ result",
+      "Nothing — good players don't journal"
+    ],
+    answer: 1,
+    explain: "The After-Action Review captures focus, mistakes, baffling spots, tilt, and an A/B/C self-rating — that's what turns sessions into improvement (and feeds your coach)."
+  },
+  {
+    id: "p1-tagfish-mc",
+    phase: 1, type: "mc", concept: "player-types",
+    source: "Preflop Online Poker — Sub-Domino 1.1 (TAGfish)",
+    question: "A 'TAGfish' (bad reg — tight-ish but plays more from late position) keeps stealing your blinds from the CO/BTN. Best counter?",
+    choices: [
+      "Fold and wait for aces",
+      "3bet-resteal from the blinds frequently — they open too wide late and over-fold to 3bets",
+      "Call every steal and play guessing games postflop",
+      "Limp behind to set-mine"
+    ],
+    answer: 1,
+    explain: "TAGfish open too wide in late position but can't handle 3bets — punish their steals with light 3bet-resteals from the blinds."
+  },
+  {
+    id: "p1-maniac-mc",
+    phase: 1, type: "mc", concept: "player-types",
+    source: "Preflop Online Poker — Sub-Domino 1.1 (Maniac)",
+    question: "A Maniac (plays tons of hands, bluffs constantly) keeps barreling into you. Best adjustment?",
+    choices: [
+      "Bluff them back even harder",
+      "Tighten up, then call down lighter and value-bet relentlessly — let them bluff into your made hands",
+      "Fold everything but the nuts",
+      "Avoid the table entirely"
+    ],
+    answer: 1,
+    explain: "Don't fight a Maniac's fire with fire. Sit tight, let them barrel into your strong hands, call down lighter, and value-bet — they tilt and spew after failed bluffs."
+  },
+
   /* ---------- Preflop · KISS system (Phase 1 strategy) — Preflop Online Poker ---------- */
   {
     id: "pf-kiss-opens",
