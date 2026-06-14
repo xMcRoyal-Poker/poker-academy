@@ -80,6 +80,45 @@ PT.UI = (function () {
   // Backward-compatible helper (fallback if a session is entered directly).
   function pickDrills(s) { return dailyDrillSet(s).drills; }
 
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  }
+  // Concepts the user has REACHED so far (current sub-domino and everything before it) — never future material.
+  function learnedConcepts(s) {
+    const set = new Set();
+    for (const p of PT.CURRICULUM.phases) {
+      const isCur = p.id === s.phase;
+      for (let i = 0; i < p.modules.length; i++) {
+        p.modules[i].concepts.forEach(c => set.add(c));
+        if (isCur && i === (s.moduleIndex || 0)) return set;
+      }
+      if (isCur) return set;
+    }
+    return set;
+  }
+  // QUICK MIX: random warm-up across only what you've learned so far (review OK).
+  function quickMixSet(s) {
+    const learned = learnedConcepts(s);
+    const pool = PT.DRILLS.filter(d => learned.has(d.concept));
+    return mixTypes(shuffle(pool)).slice(0, 6);
+  }
+  // WEAK SPOTS: drills from your most-missed concepts (restricted to what you've learned).
+  function weakSpotSet(s) {
+    const learned = learnedConcepts(s);
+    let concepts = PT.Store.weakSpots(s).map(w => w.concept).filter(c => learned.has(c));
+    if (!concepts.length) {
+      // fallback: drilled concepts with the lowest accuracy
+      concepts = Object.entries(s.conceptStats || {})
+        .filter(([c, v]) => v.total > 0 && learned.has(c))
+        .sort((a, b) => (b[1].wrong / b[1].total) - (a[1].wrong / a[1].total))
+        .slice(0, 3).map(([c]) => c);
+    }
+    const pool = PT.DRILLS.filter(d => concepts.includes(d.concept));
+    return { drills: mixTypes(shuffle(pool)).slice(0, 6), concepts };
+  }
+
   /* ============================================================
      ONBOARDING — Step 1 (Destination) + Step 2 (SMART goal)
      Straight from the book's Action Step #10 + SMART framework.
@@ -568,12 +607,46 @@ PT.UI = (function () {
         </div>`;
     }).join("");
 
+    const weakCount = PT.Store.weakSpots(s).filter(w => learnedConcepts(s).has(w.concept)).length;
     app().innerHTML = `
       <h1 class="page">Practice 🃏</h1>
-      <p class="sub">Drill any topic — repeats welcome for review. Small XP (+2 per correct), <b>${Math.max(0, 20 - used)}/20 left today</b>. Practice doesn't touch your daily streak.</p>
+      <p class="sub">Extra reps — repeats welcome for review. Small XP (+2 per correct), <b>${Math.max(0, 20 - used)}/20 left today</b>. Doesn't touch your daily streak.</p>
+
+      <div class="label">QUICK MODES</div>
+      <div class="leak" data-mode="quickmix">
+        <span class="le">⚡</span>
+        <div style="flex:1"><div class="lt">Quick Mix — warm-up</div>
+        <div class="ld">6 random drills from what you've learned so far. Fire before a 7XL session.</div></div>
+        <span class="go" style="color:var(--accent)">→</span>
+      </div>
+      <div class="leak" data-mode="weak">
+        <span class="le">🩹</span>
+        <div style="flex:1"><div class="lt">Weak spots ${weakCount ? '<small style="color:#ff8a7a">· ' + weakCount + " flagged</small>" : ""}</div>
+        <div class="ld">Drills from the concepts you miss most. Fix leaks fast.</div></div>
+        <span class="go" style="color:var(--accent)">→</span>
+      </div>
+
+      <div class="label">BY TOPIC</div>
       ${rows}
     `;
+    app().querySelectorAll("[data-mode]").forEach(el => el.onclick = () => {
+      if (el.dataset.mode === "quickmix") startQuickMix();
+      else if (el.dataset.mode === "weak") startWeakDrill();
+    });
     app().querySelectorAll("[data-practice]").forEach(el => el.onclick = () => startPractice(el.dataset.practice));
+  }
+
+  function startQuickMix() {
+    const drills = quickMixSet(PT.state);
+    if (!drills.length) { toast("Do a few drills first to build your warm-up"); return; }
+    session = { list: drills, i: 0, correct: 0, done: false, revealed: false, answered: false, results: [], practice: true, practiceLabel: "quick mix" };
+    PT.go("drill");
+  }
+  function startWeakDrill() {
+    const { drills } = weakSpotSet(PT.state);
+    if (!drills.length) { toast("No weak spots yet — drill more and your misses will show up here"); return; }
+    session = { list: drills, i: 0, correct: 0, done: false, revealed: false, answered: false, results: [], practice: true, practiceLabel: "weak spots" };
+    PT.go("drill");
   }
 
   function startPractice(concept) {
