@@ -31,6 +31,15 @@ PT.UI = (function () {
     const list = p.modules || [];
     return list[Math.min(s.moduleIndex || 0, list.length - 1)] || null;
   }
+  // The next sub-domino (next module this phase, else first of next phase, else null = curriculum done)
+  function nextModuleInfo(s) {
+    const phase = curPhase(s);
+    if (!phase) return null;
+    if (s.moduleIndex + 1 < phase.modules.length) return phase.modules[s.moduleIndex + 1];
+    const np = PT.CURRICULUM.phases.find(p => p.id === phase.id + 1);
+    return np ? np.modules[0] : null;
+  }
+
   // Pick 5 drills for this session: prefer matching concepts, prioritize weak spots & SRS-due, fall back to phase
   // The subject pool = every drill whose concept belongs to these concepts.
   function poolFor(concepts) {
@@ -222,8 +231,21 @@ PT.UI = (function () {
       </div>
       <div class="looprow center">Today: 📖 ${tc.read} · 🎯 ${tc.drill} · 📓 ${tc.review}</div>
 
-      ${(s.sessionsOnModule || 0) >= 1 ? `<button class="btn btn-secondary btn-full mt" data-act="advance">✓ I've got this sub-domino — next one →</button>
-      <div class="looprow center">Advance only when the skill feels solid (the book's way).</div>` : ""}
+      ${(() => {
+        const set = dailyDrillSet(s);
+        const readDone = sess && (s.readCredited || {})[sess.domino];
+        const ready = readDone && set.exhausted;
+        const nm = nextModuleInfo(s);
+        if (ready) {
+          return `<button class="btn btn-primary btn-full btn-lg mt" data-act="advance">✅ Covered ♦${esc(sess.domino)} — ${nm ? "Start ♦" + esc(nm.domino) + " " + esc(nm.title) + " →" : "Finish the path 🎉"}</button>
+            <div class="looprow center">Read ✓ and all drills done. Move on when it feels solid.</div>`;
+        }
+        if ((s.sessionsOnModule || 0) >= 1) {
+          return `<button class="btn btn-secondary btn-full mt" data-act="advance">✓ Got this sub-domino — next one →</button>
+            <div class="looprow center">Or keep working it — advance whenever it feels solid.</div>`;
+        }
+        return "";
+      })()}
     `;
 
     app().querySelectorAll("[data-act]").forEach(el => el.onclick = () => {
